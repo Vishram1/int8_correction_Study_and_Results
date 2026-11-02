@@ -1,0 +1,92 @@
+\begin{thebibliography}{11}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Araghi et~al.(2026)Araghi, Pilevar, and Lin]{araghi2026recti}
+Hamidreza~Yaghoubi Araghi, Parastoo Pilevar, and Ming~C. Lin.
+\newblock {Recti-Q}: Feature-space rectification for out-of-distribution-robust
+  quantized perception in edge robotics, 2026.
+\newblock URL \url{https://arxiv.org/abs/2607.18540v2}.
+\newblock arXiv:2607.18540v2.
+
+\bibitem[Gao and Zheng(2026)]{gao2026lcap}
+Tianyu Gao and Guantian Zheng.
+\newblock {LCAP}: Population-informed latent chip adaptation from few output
+  probes for photonic neural networks, 2026.
+\newblock URL \url{https://arxiv.org/abs/2609.16823v1}.
+\newblock arXiv:2609.16823v1.
+
+\bibitem[He et~al.(2016)He, Zhang, Ren, and Sun]{he2016}
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun.
+\newblock Deep residual learning for image recognition.
+\newblock In \emph{Proceedings of the IEEE Conference on Computer Vision and
+  Pattern Recognition}, pages 770--778, 2016.
+\newblock URL \url{https://arxiv.org/abs/1512.03385}.
+
+\bibitem[Jacob et~al.(2018)Jacob, Kligys, Chen, Zhu, Tang, Howard, Adam, and
+  Kalenichenko]{jacob2018}
+Benoit Jacob, Skirmantas Kligys, Bo~Chen, Menglong Zhu, Matthew Tang, Andrew
+  Howard, Hartwig Adam, and Dmitry Kalenichenko.
+\newblock Quantization and training of neural networks for efficient
+  integer-arithmetic-only inference.
+\newblock In \emph{Proceedings of the IEEE Conference on Computer Vision and
+  Pattern Recognition}, pages 2704--2713, 2018.
+\newblock URL \url{https://arxiv.org/abs/1712.05877}.
+
+\bibitem[Li et~al.(2026)Li, Wang, Huang, and Gotei]{li2026scale}
+Tung-Ling Li, Lee-Chi Wang, Jiale Huang, and Janaki~Ram Gotei.
+\newblock {Scale-QLoRA}: Code-invariant adapter merging for native 4-bit
+  microscaling {LLMs}, 2026.
+\newblock URL \url{https://arxiv.org/abs/2609.04526v1}.
+\newblock arXiv:2609.04526v1.
+
+\bibitem[Manohara et~al.(2023)Manohara, Dayal, Afzal, Bakshi, and
+  Fu]{manohara2023mrq}
+Manasa Manohara, Sankalp Dayal, Tariq Afzal, Rahul Bakshi, and Kahkuen Fu.
+\newblock {MRQ}: Support multiple quantization schemes through model
+  re-quantization, 2023.
+\newblock URL \url{https://arxiv.org/abs/2308.01867v2}.
+\newblock arXiv:2308.01867v2.
+
+\bibitem[{Qualcomm Technologies, Inc.}(2026)]{qaihub}
+{Qualcomm Technologies, Inc.}
+\newblock {Qualcomm AI Hub}: Mobile models, 2026.
+\newblock URL \url{https://aihub.qualcomm.com/mobile/models}.
+\newblock Source model catalog; exact artifact hashes recorded in the
+  experiment protocol.
+
+\bibitem[Recht et~al.(2019)Recht, Roelofs, Schmidt, and Shankar]{recht2019}
+Benjamin Recht, Rebecca Roelofs, Ludwig Schmidt, and Vaishaal Shankar.
+\newblock Do {ImageNet} classifiers generalize to {ImageNet}?
+\newblock In \emph{Proceedings of the 36th International Conference on Machine
+  Learning}, volume~97 of \emph{Proceedings of Machine Learning Research},
+  pages 5389--5400, 2019.
+\newblock URL \url{https://proceedings.mlr.press/v97/recht19a.html}.
+
+\bibitem[Sandler et~al.(2018)Sandler, Howard, Zhu, Zhmoginov, and
+  Chen]{sandler2018}
+Mark Sandler, Andrew Howard, Menglong Zhu, Andrey Zhmoginov, and Liang-Chieh
+  Chen.
+\newblock {MobileNetV2}: Inverted residuals and linear bottlenecks.
+\newblock In \emph{Proceedings of the IEEE Conference on Computer Vision and
+  Pattern Recognition}, pages 4510--4520, 2018.
+\newblock URL \url{https://arxiv.org/abs/1801.04381}.
+
+\bibitem[Tang et~al.(2025)Tang, Fu, Yu, and Wu]{tang2025qwt}
+Ningyuan Tang, Minghao Fu, Hao Yu, and Jianxin Wu.
+\newblock {QwT-v2}: Practical, effective and efficient post-training
+  quantization, 2025.
+\newblock URL \url{https://arxiv.org/abs/2505.20932v1}.
+\newblock arXiv:2505.20932v1.
+
+\bibitem[Xu et~al.(2026)Xu, Wang, Li, Cui, Hu, and Zhang]{xu2026quept}
+Ke~Xu, Yixin Wang, Zhongcheng Li, Hao Cui, Jinshui Hu, and Xingyi Zhang.
+\newblock {QuEPT}: Quantized elastic precision transformers with one-shot
+  calibration for multi-bit switching, 2026.
+\newblock URL \url{https://arxiv.org/abs/2602.12609v1}.
+\newblock arXiv:2602.12609v1.
+
+\end{thebibliography}

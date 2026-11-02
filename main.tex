@@ -1,0 +1,260 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[a4paper,margin=0.75in,columnsep=0.26in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs,graphicx,array}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage[hidelinks]{hyperref}
+\usepackage{microtype}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\Acc}{\operatorname{Acc}}
+\newcommand{\diag}{\operatorname{diag}}
+\newcommand{\R}{\mathbb{R}}
+\input{author.tex}
+\title{Classifier-Correction Reuse after INT8 Recalibration:\\Accuracy Retention and the Value of Shared Fitting}
+\author{\paperAuthor}
+\date{October 15, 2026}
+\hypersetup{pdftitle={Classifier-Correction Reuse after INT8 Recalibration: Accuracy Retention and the Value of Shared Fitting},pdfauthor={Vishwaram Reddy}}
+\setlength{\emergencystretch}{1em}
+
+\begin{document}
+\twocolumn[{\begin{@twocolumnfalse}
+\maketitle
+\begin{abstract}
+Can a previously fitted classifier correction retain useful accuracy when an INT8 model is recalibrated? We evaluate single-source reuse and shared fitting across three source calibrations, using five excluded target calibrations, two pretrained CNNs, and seven fixed methods and controls. Corrections are folded into the classifier without updating the backbone or adding graph operators. All 70 host configurations and a preselected 28-configuration Snapdragon NPU panel are evaluated on the same previously unevaluated 7,000 ImageNetV2 images. Both Single and Shared remain within the preset 0.5-percentage-point descriptive loss budget relative to target refitting on every tested target; their worst observed native loss is 0.071 points. This supports the feasibility of correction reuse in the tested setting, but not population noninferiority. The primary test of an additional shared-fitting advantage remains inconclusive: native Shared minus Single averages $+0.043$ points for MobileNetV2 (95\% paired class-bootstrap interval $[-0.086,0.171]$) and $-0.107$ for ResNet18 ($[-0.221,0.000]$). Shared fitting also shows no consistent advantage over averaging, target refitting, or the unchanged target. The practical contribution is a reproducible workflow for evaluating accuracy retention after correction reuse, with explicit re-encoding controls and preparation accounting. Three source feature sets did not demonstrate a consistent benefit over one here; neither equivalence nor an inference-speed or energy improvement is established.
+\end{abstract}
+\vspace{0.12in}
+\end{@twocolumnfalse}}]
+
+\section{Introduction}
+Post-training quantization uses representative inputs to estimate a low-precision model for edge inference \citep{jacob2018}. Different calibration samples can yield different activation ranges and errors at fixed nominal precision. Here, \emph{recalibration} means re-estimating quantization encodings, not calibrating predicted probabilities.
+
+Affine feature compensation and small-head adaptation are established ways to address quantization error \citep{tang2025qwt,araghi2026recti}. Their use raises a lifecycle question: when quantization encodings change but the original trained model remains fixed, can an existing correction be reused? A natural extension fits a single correction across several quantizer realizations, hoping to reduce sensitivity to a particular calibration draw. This adds preparation work, so its benefit should be tested against ordinary single-source reuse and simple parameter averaging.
+
+We conduct that test with frozen pretrained MobileNetV2 and ResNet18 models. Three source calibrations supply correction fits; five excluded target calibrations receive every method. Two targets per model are selected in advance for native execution. The final comparison uses 7,000 images excluded from adaptation and development. Source A/B and earlier development outcomes were already known when the extension was designed; the new target seeds, method matrix, and final evaluation were fixed prospectively.
+
+The results support a useful distinction: correction reuse is feasible in this setting, while a further benefit from pooling sources remains unestablished. Both Single and Shared meet the preset descriptive accuracy-loss budget relative to target refitting on all tested targets. Shared fitting does not consistently outperform Single, and the unchanged baseline remains competitive. The frozen primary comparisons are retained; observed budget compliance is not a replacement superiority or noninferiority test.
+
+The study contributes (i) a reproducible correction-reuse workflow with folding, restricted head re-encoding, and native validation; (ii) a complete comparison separating ordinary reuse, shared fitting, averaging, and target-aware controls; and (iii) preparation accounting and conditional uncertainty that help assess whether extra fitting is justified. The regression methods are established. The question applies when recalibration is required; if the original encodings can be kept, an existing corrected artifact may already suffice.
+
+\section{Related work}
+QwT-v2 uses channel-wise affine compensation and discusses integration into integer inference \citep{tang2025qwt}. Our feature-wise ridge fit is an instance of established regression, restricted to one classifier input. Recti-Q adapts a small classifier head on a frozen quantized backbone for robust perception \citep{araghi2026recti}. We do not reproduce its low-rank adapter or corruption benchmarks. Quantized adapter merging, multi-precision adaptation, and re-quantization across schemes are also established topics \citep{li2026scale,xu2026quept,manohara2023mrq}; exposure to multiple quantization configurations is not a new general principle.
+
+LCAP is especially relevant to the shared-correction premise \citep{gao2026lcap}. It learns population-informed correction from historical photonic chips and uses output probes for personalization, with experiments on simulated three-layer, 64-mode photonic networks for MNIST. It is prior art for learning transferable corrections across hardware realizations. Our distinction is empirical: overlapping digital INT8 calibration draws, fixed pretrained CNN classifier heads, and actual execution on a mobile NPU. We do not claim the first shared correction, and this experiment is not a performance comparison against complete implementations of those papers. The focused literature review is not exhaustive evidence of novelty.
+
+\section{Correction methods and comparisons}
+\subsection{Single-source and shared regression}
+Let $x_{ci,j}$ denote channel $j$ of the dequantized classifier input for adaptation image $i$ under calibration $c$. Let $y_{i,j}$ be the corresponding frozen FP32 feature. For each channel independently, single-source fitting minimizes
+\begin{equation}
+ \frac{1}{n}\sum_i(ax_{ci}+b-y_i)^2+\lambda v_c(a-1)^2,
+ \label{eq:single}
+\end{equation}
+where $n=1000$, $v_c=\Var_i(x_{ci})$, and $\lambda=0.01$. Variance and covariance use population-form empirical moments. For $v_c>10^{-12}$,
+\begin{equation}
+ a_c=\frac{\Cov_i(x_{ci},y_i)+\lambda v_c}{(1+\lambda)v_c},
+ \quad b_c=\bar y-a_c\bar x_c.
+\end{equation}
+Otherwise, $a_c=1$ and $b_c=\bar y-\bar x_c$. Statistics use float64; parameters are stored in float32. No labels, gradients, QAT, or backbone updates are used. Fitting still estimates new parameters: 2,560 for MobileNetV2 and 1,024 for ResNet18.
+
+Shared fitting uses all $C=3$ source feature sets with one slope and intercept per channel:
+\begin{equation}
+ \min_{a,b}\ \frac{1}{Cn}\sum_{c,i}(ax_{ci}+b-y_i)^2
+ +\lambda\bar v(a-1)^2,
+ \label{eq:shared}
+\end{equation}
+where $\bar v=C^{-1}\sum_c v_c$. Writing $v_p$ and $q_p$ for pooled variance and covariance, respectively, gives
+\begin{equation}
+ a_{\mathrm{shared}}=\frac{q_p+\lambda\bar v}{v_p+\lambda\bar v},
+ \quad b_{\mathrm{shared}}=\bar y-a_{\mathrm{shared}}\bar x_p.
+ \label{eq:sharedsolution}
+\end{equation}
+The penalty uses mean \emph{within-source} variance, not pooled variance. If $v_p\leq10^{-12}$, the slope is one and only the mean is aligned. Parameter averaging instead takes arithmetic means of the three independently fitted slope and intercept vectors. All sources use the same adaptation images and teacher features.
+
+\subsection{Seven arms and folding}
+Each target receives the following fixed arms:
+\begin{enumerate}
+\item \textbf{Base:} the unchanged quantized target.
+\item \textbf{Re-encode:} its effective classifier is materialized and re-encoded without fitting a correction.
+\item \textbf{Single:} reuse the source-A affine correction.
+\item \textbf{Average:} reuse the arithmetic mean of A/B/C corrections.
+\item \textbf{Shared:} reuse the solution of Eq.~\eqref{eq:shared}.
+\item \textbf{Refit:} fit the same affine regression on target features.
+\item \textbf{Bias:} fit a target-aware output-bias correction using mean FP32 minus raw target logits.
+\end{enumerate}
+Refit and Bias have privileged access to target adaptation features; neither is an accuracy upper bound.
+
+For a target with effective quantized classifier $Wh+u$, an affine correction folds in real arithmetic as
+\begin{equation}
+ W'=W\diag(a),\qquad u'=u+Wb.
+ \label{eq:fold}
+\end{equation}
+The correction therefore adds no graph operator in this implementation. Re-quantization can change the folded result, so real-arithmetic equivalence alone does not establish deployed accuracy. We re-estimate only allowed classifier encodings using that target's original 500 calibration images. Backbone tensors and upstream quantization encodings remain frozen. The output quantizer remains enabled in all scored results. The no-learning re-encoding control follows the same export path with $a=1,b=0$; Base keeps its original tensors and encodings.
+
+\subsection{Estimands and interpretation}
+For target $t$, the two primary effects are
+\begin{align}
+ D^{S-U}_t&=\Acc(\mathrm{Shared}_t)-\Acc(\mathrm{Single}_t),\\
+ D^{S-R}_t&=\Acc(\mathrm{Shared}_t)-\Acc(\mathrm{Refit}_t).
+\end{align}
+Positive values favor Shared. We report every target, equal-target means, and the worst observed difference. Secondary comparisons are Shared minus Average, Re-encode, Base, and Bias, and Single minus Refit. A benefit over Base can include head re-encoding effects; the Re-encode comparison controls for that procedure but still includes interactions between fitting and the new encodings.
+
+The frozen descriptive loss budget is 0.5 percentage points (pp), equivalent to 35 mistakes among 7,000 images on one target. It is an engineering criterion chosen for this study, not an application-validated tolerance or a formal noninferiority margin.
+
+\section{Experimental protocol}
+\subsection{Data, models, and prospective scope}
+The pretrained ONNX models come from Qualcomm AI Hub \citep{qaihub}, with original tensors fixed and source hashes recorded. MobileNetV2 \citep{sandler2018} has 1,280 classifier-input channels; ResNet18 \citep{he2016} has 512. Both output 1,000 classes.
+
+ImageNetV2 MatchedFrequency \citep{recht2019} contains ten images per class. The fixed split assigns one per class to the 1,000-image calibration/adaptation pool, two to the 2,000-image development set, and seven to the 7,000-image final set. Split manifests and image hashes are retained. Final images were processed for dataset identity/duplicate preparation but received no model evaluation before this acquisition; development images had previously been consulted.
+
+Each calibration draw samples 500 images without replacement from the same 1,000-image pool. Source A/B seeds are 2026100601/2026100602; source C uses 2026101401. Five targets use seeds 2026101411 through 2026101415. Off-diagonal overlaps range from 237 to 269 images; these are neither independent datasets nor a broad sample of domain shifts. All correction fits use the same 1,000 adaptation images. Targets are excluded from Single, Average, and Shared fitting, but mandatory target head re-encoding uses their original 500 samples. No final accuracy is used to select arms, seeds, ridge, or native targets.
+
+RGB inputs are bilinearly resized to a 256-pixel shorter side, center-cropped to $224\times224$, and converted to float32 in $[0,1]$. The source graphs already include normalization. Host NCHW and native NHWC inputs contain identical values.
+
+\subsection{Quantization and artifact checks}
+Host preparation uses Python 3.10.12, NumPy 1.26.4, ONNX 1.19.0, ONNX Runtime 1.23.2, and AIMET ONNX 2.40.0. The fixed recipe requests W8A8 with \texttt{tf\_enhanced} calibration and \texttt{htp\_v81}. Host simulation and feature extraction use a CPU provider; these are preparation and numerical comparisons, not edge CPU timing measurements.
+
+Features are exposed at the actual dequantized classifier input. Extraction checks prediction preservation and reconstruction of raw classifier logits from cached features and effective weights. Export checks compare sliced-head and full-graph predictions and audit permitted tensor/encoding changes. Final host checks also verify sliced-head/full-graph agreement on their check inputs. The study contains 70 host artifacts: two models, five targets, seven arms.
+
+QAIRT 2.45.41.260507 converts and quantizes the 28 preselected native artifacts: both models, targets 1/2, and all arms. Conversion requests per-channel 8-bit weights, 8-bit activations, and 32-bit bias. The inspected DLC representations contain 102 dynamic \texttt{uint8\_fixed} tensors for every MobileNetV2 artifact and 52 for every ResNet18 artifact, with unchanged operator structure within each target. These are intermediate-representation audits before HTP finalization, not proof of every internal kernel's arithmetic width. Upstream graph/tensor audits restrict changes to the permitted classifier components.
+
+\subsection{Native validation and accuracy acquisition}
+The platform is identified by the operator as Snapdragon 8 Elite Gen 5, with SM8850 and an Android 16 userdebug build recorded. Anonymous execution identity Unit 3 matches across validation and final runs. Continuity with earlier handsets is unconfirmed; this label does not establish a third physical handset. Private raw records retain the serials.
+
+For each artifact, validation executes ten development images using the reference runner, an unprofiled memory runner, and a basic-profile memory runner. All output vectors match bitwise across those three paths. The 84 validation jobs provide 336 HTP execution events, including two warmups per profiled artifact. This validates the native execution path; it does not require host simulation to be numerically identical to the NPU.
+
+The final acquisition uses the exact validated models/runtime with profiling off. Its sealed, randomized schedule covers 70 chunks of 100 images per artifact: 1,960 jobs and 196,000 model--image outputs. All jobs pass coverage, identity, hash, output-shape, and finiteness checks. HTP evidence comes from linked validation rather than final profiles. The final 196,000 outputs reuse the same 7,000 images and must not be treated as that many independent test examples.
+
+Thermal management remains enabled and temperatures are observed without a starting-temperature gate. All 3,920 before/after thermal snapshots were parsed; their maximum NSP readings span 48.4--66.1$^\circ$C. These are sensor readings, not ambient temperatures. Detailed screen, charging, and external-cooling notes were not supplied for this acquisition; the operator requested that conditions be treated as equivalent. We retain that as an unverified assumption rather than a measured control. The phone wall clock is incorrect, so Windows UTC timestamps and artifact hashes identify the runs. Neither these timings nor the structural absence of extra operators supports a latency, power, or energy claim.
+
+\subsection{Uncertainty and independent verification}
+Top-1 uses NumPy's first-maximal-index tie rule. All contrasts pair predictions on the same images. The frozen bootstrap samples 1,000 classes with replacement, retaining all seven images in each sampled class and the same class draws across targets and arms. It uses 10,000 replicates with seed 2026101499. Equal-target means are computed before resampling. The reported 95\% percentile intervals are pointwise, conditional on the observed target panel, and not multiplicity adjusted. They do not estimate population uncertainty over calibration draws or hardware units.
+
+Host and native panels are analyzed separately: the host mean uses five targets and the native mean two. An independent NumPy verifier reconstructs all 98 accuracy cells and 126 target/mean contrast intervals from compact prediction arrays. Hashes connect these derivatives to the retained full outputs. The compact supplement checks statistics, not raw acquisition authenticity or a new execution of the models.
+
+\section{Results}
+\begin{table*}[t]
+\centering\small
+\input{tables/native-accuracies.tex}
+\caption{Complete native final top-1 accuracy (\%) on 7,000 images per artifact. Re-enc. is the no-learning head re-encoding control; Bias is target-aware bias refitting. Values are rounded to two decimals here; exact counts and ties are in the supplement. No arm is omitted or selected after evaluation.}
+\label{tab:native}
+\end{table*}
+
+\begin{table*}[t]
+\centering\small
+\input{tables/primary.tex}
+\caption{Primary equal-target accuracy contrasts and 95\% paired class-bootstrap intervals, in percentage points. Native means use two targets per model; host means use five. Intervals are conditional and pointwise. An interval including zero is not evidence of equivalence.}
+\label{tab:primary}
+\end{table*}
+
+\subsection{Native accuracy retention and the shared-fitting comparison}
+Tables~\ref{tab:native} and~\ref{tab:primary} give the complete native scores and primary contrasts. Shared minus Single is $+0.043$ pp for MobileNetV2 and $-0.107$ pp for ResNet18. Their respective target effects are $+0.114,-0.029$ pp and $-0.114,-0.100$ pp. The conditional intervals include zero; the ResNet18 upper endpoint is exactly zero under the specified bootstrap. Neither model establishes a positive shared-fitting effect.
+
+Relative to target refitting, Shared is $+0.050$ pp on MobileNetV2 and $-0.050$ pp on ResNet18, again with intervals spanning zero. Shared minus Average is only $+0.007$ and $+0.014$ pp, respectively. All seven methods remain close in this finite native panel, but numerical proximity is not a proof that their deployment behavior or population accuracy is identical.
+
+Single minus Refit averages $+0.007$ pp for MobileNetV2 and $+0.057$ pp for ResNet18. Its worst observed target effects are $-0.071$ and $+0.043$ pp. Across the four native model--target cases, both Single and Shared have a worst observed loss of $0.071$ pp relative to Refit, or five additional mistakes on one target. Both stay within the prospective 0.5 pp descriptive budget. This supports observed accuracy retention for reuse, not superiority of Shared: target refitting is not an accuracy oracle, and these point estimates do not establish noninferiority on future recalibrations.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=.96\textwidth]{figures/primary-effects.pdf}
+\caption{Primary mean contrasts with paired class-bootstrap 95\% intervals. Host and NPU means have different target coverage. The plotted intervals quantify class resampling conditional on each fixed panel; they do not include new-calibration or new-device uncertainty.}
+\label{fig:effects}
+\end{figure*}
+
+\subsection{Host evidence and complete secondary comparisons}
+Across all five host targets, Shared minus Single averages $+0.051$ pp for MobileNetV2 and $-0.057$ pp for ResNet18. Shared minus Refit averages $-0.009$ and $+0.031$ pp. The corresponding primary intervals include zero (Table~\ref{tab:primary}). Across the ten host model--target cases, the worst observed losses relative to Refit are $0.343$ pp for Single and $0.229$ pp for Shared; both meet the descriptive 0.5 pp budget. These finite-panel extrema are not a test of superior worst-case robustness. The full matrix and target-level primary intervals are in Appendix~\ref{app:results}.
+
+The final FP32 host references reach 58.043\% and 57.529\% for MobileNetV2 and ResNet18, respectively. Matching a teacher feature is not the same objective as maximizing ground-truth top-1, and finite-sample accuracy need not improve after feature reconstruction.
+
+All secondary mean comparisons are reported in Table~\ref{tab:secondary}. Two host intervals exclude zero: Shared minus Re-encode for MobileNetV2 is $+0.214$ pp $[0.006,0.426]$, and Single minus Refit for ResNet18 is $+0.089$ pp $[0.011,0.166]$. These unadjusted secondary findings are retained without promoting them to the primary claim. Native Shared minus Base is $+0.029$ pp $[-0.236,0.293]$ for MobileNetV2 and $-0.014$ pp $[-0.157,0.129]$ for ResNet18. The experiment therefore also does not demonstrate a consistent native improvement over leaving the target unchanged.
+
+Output ties occur on 255--335 images per native MobileNetV2 artifact and 236--283 per ResNet18 artifact. The fixed tie rule is part of the measured procedure. With effects this small, the output quantizer and decision rule are relevant implementation details; no favorable alternative rule was selected from final results.
+
+\subsection{Preparation requirements and feature diagnostics}
+Shared and Average require three source feature sets; Single requires one. For each transformed target, all three methods still need its 500 calibration examples for head re-encoding. Refit additionally needs the remaining 500 adaptation features. Our comparative pipeline collects all 1,000 target features to construct all arms; it did not actually avoid that work.
+
+Source-C quantizer calibration took 35.20 seconds for MobileNetV2 and 37.54 seconds for ResNet18; extracting 1,000 adaptation features took 45.84 and 65.49 seconds. Combined averaging/shared-fit stages took 0.0394 and 0.0188 seconds. These are preparation records, not controlled speed benchmarks; A/B caches were reused. The supplement includes development extraction, head export, and conversion stages. Single-source fitting records include data reads and bias-reference fitting as well as affine regression.
+
+The shared objective has a useful standard decomposition. Because every source uses the same teacher and images, for nondegenerate channels,
+\begin{equation}
+ a_{\mathrm{shared}}=
+ \frac{C^{-1}\sum_c v_ca_c}
+ {\bar v+\Var_c(\bar x_c)/(1+\lambda)}.
+ \label{eq:decomposition}
+\end{equation}
+Thus Shared relates to a variance-weighted source fit, with additional shrinkage from differences in source means. This is ordinary least-squares algebra, not a new theorem. Appendix~\ref{app:algebra} supplies the derivation.
+
+On the adaptation features, median between-source mean variance divided by total feature variance is $3.71\times10^{-4}$ for MobileNetV2 and $5.16\times10^{-6}$ for ResNet18. RMS Shared-minus-Average slope differences are $1.27\times10^{-3}$ and $2.21\times10^{-5}$. These diagnostics are compatible with limited differences between the fitted corrections in this source pool. They do not causally explain top-1 outcomes after re-encoding and NPU execution, or establish a rule for other datasets.
+
+\section{Practical use and limitations}
+\paragraph{Reuse an existing correction with explicit checks.}
+The demonstrated workflow lets a practitioner fold an existing correction into a recalibrated classifier, retain the backbone, and validate the resulting artifact on the intended accelerator. No additional graph operator is required. This property applies to both Single and Shared and establishes deployment feasibility, not lower measured inference time or energy.
+
+\paragraph{Separate target preparation from correction refitting.}
+Reusable parameters avoid solving a new target-dependent correction objective. They still require the target's 500 calibration examples for head re-encoding. Target refitting in this protocol additionally accesses the remaining 500 adaptation features. These access requirements can guide deployment planning; the comparative pipeline itself collected all target features and therefore did not measure that work being avoided.
+
+\paragraph{Use controls to decide whether more adaptation is warranted.}
+An unchanged target and a no-learning re-encoding control should accompany any correction comparison on separate development data. The present results give no consistent accuracy reason to prefer three-source Shared over one-source Single, or to replace every unchanged target with a correction. Additional sources should therefore earn their preparation cost through application-relevant validation. This is practical guidance motivated by the study, not a newly evaluated selection algorithm; choosing a new method from these final results would require fresh evaluation data.
+
+\paragraph{Scope of the evidence.}
+The results answer a narrow deployment question. Only two pretrained CNNs, one dataset, one calibration recipe, and one native execution identity are studied. All calibration draws overlap within a common 1,000-image pool, and all fits reuse those images. Native evaluation covers only two prespecified targets per model. Larger distribution shifts, other quantization algorithms, and more diverse source populations could behave differently.
+
+Earlier source A/B and development outcomes influenced the decision to study shared fitting. The final images and target protocol provide a fresh test of the fixed extension, not a preregistration of the entire research history. The study has no external registry timestamp or simultaneous calibration-population inference. A small effect and an interval containing zero cannot justify universal equivalence or the claim that shared fitting never helps.
+
+No direct full-method reproduction of QwT-v2, Recti-Q, or LCAP is included. The comparison isolates simple established classifier corrections, rather than claiming to beat those systems. Hardware records establish validation/final identity linkage, not replication across physical phones. Missing setup notes, the experimental Android build, and the incorrect phone clock further constrain deployment generalization. Recorded thermal behavior has not been experimentally isolated as a cause of accuracy changes.
+
+\section{Conclusion}
+The experiments demonstrate correction reuse through classifier folding and restricted head re-encoding on a mobile NPU. Both Single and Shared retain accuracy within the study's descriptive loss budget relative to target refitting on every tested target, while adding no graph operators. These useful properties are shared by both approaches. The primary comparisons do not establish an additional benefit from three-source fitting: its native accuracy effect relative to Single is small and changes sign across architectures. Practitioners can use the released workflow to test whether an existing correction remains adequate and whether further preparation is justified, with unchanged-model and re-encoding controls kept in the comparison. The contribution is an empirical basis for evaluating reuse; population equivalence, a new compensation algorithm, and inference-speed or energy gains remain unestablished.
+
+\section*{Data and code availability}
+The accompanying evidence package contains ordered predictions, labels and split manifests, fitted correction vectors, frozen method/analysis source, complete statistics, figure code, and a standalone NumPy verifier. Source model hashes and private audit hashes are recorded. It excludes image pixels, pretrained models, proprietary SDK/runtime binaries, and literal device serials. Full inference reproduction additionally requires obtaining the dataset/models and the stated software and device environment. Compact predictions support statistical reproduction; they do not replace raw acquisition evidence. No public repository or archival identifier has yet been assigned to this draft.
+
+\begingroup\setlength{\bibsep}{2pt}
+\bibliographystyle{plainnat}
+\bibliography{references}
+\endgroup
+
+\onecolumn
+\appendix
+\section{Complete final results}\label{app:results}
+Every target and arm is retained below. Exact accuracy counts, output ties, and all 98 per-target primary/secondary contrasts, including improved/harmed prediction counts, are supplied in the evidence CSVs and JSON. The 28 equal-target mean contrasts are also supplied there. Percentages in accuracy tables are rounded to two decimals; contrasts use three decimals. These display choices do not affect computations.
+
+\begin{table}[!ht]
+\centering\small
+\input{tables/host-accuracies.tex}
+\caption{All 70 host final top-1 accuracies (\%), on the same 7,000 images as the native panel. These are quantization-simulation results, not NPU measurements.}
+\label{tab:host}
+\end{table}
+
+\begin{table}[!ht]
+\centering\footnotesize\setlength{\tabcolsep}{3pt}
+\input{tables/per-target.tex}
+\caption{Per-target primary contrasts plus Single minus Refit, in pp with conditional 95\% intervals. This displays target variation without treating repeated images as independent calibration replicates. Worst observed values discussed in the text are minima over the relevant rows.}
+\label{tab:targets}
+\end{table}
+
+\begin{table}[!ht]
+\centering\small
+\input{tables/secondary.tex}
+\caption{All prespecified secondary equal-target contrasts and pointwise 95\% intervals (pp). These intervals are not multiplicity adjusted. Per-target versions and exact values are in the supplement.}
+\label{tab:secondary}
+\end{table}
+
+\section{Shared-fit decomposition}\label{app:algebra}
+Suppressing channel indices, let $m_c=\bar x_c$, $v_c=\Var_i(x_{ci})$, and $q_c=\Cov_i(x_{ci},y_i)$. The same teacher values and balanced source sample sizes imply
+\begin{align}
+ v_p&=\bar v+\Var_c(m_c),\\
+ q_p&=C^{-1}\sum_c q_c.
+\end{align}
+From the single-source solution, $(1+\lambda)v_ca_c=q_c+\lambda v_c$. Averaging and substituting in Eq.~\eqref{eq:sharedsolution} yields Eq.~\eqref{eq:decomposition}. The intercept follows from the pooled mean normal equation. The implemented shared slope and this identity agree to approximately $10^{-7}$ after float32 storage on these data. Separate numerical checks compare the shared solution to augmented least squares and check constant channels and folding orientation. No new statistical guarantee follows from the identity.
+
+\section{Evidence and reproduction notes}
+Study identifier:
+\begin{center}\small\texttt{recalibration-shared-20261014-v1}\end{center}
+The protocol was written on 14 October before new target inference; artifact freezing and native validation preceded final evaluation. Validation and final Windows timestamps place both native acquisitions on 15 October. The final audit hashes 33,326 returned files; validation hashes 1,630. Audits and derivative records are distinguished so redaction does not silently change a canonical record.
+
+Run \texttt{python verify\_evidence.py} in the extracted evidence package with NumPy installed. It checks the inventory, recomputes class-paired uncertainty using a separate multinomial-count implementation, and compares all cells and intervals with the frozen analysis. \texttt{render\_results.py} uses Matplotlib to reproduce tables and the figure from the verified statistics. \texttt{build.sh} compiles the manuscript using LaTeX or Tectonic. The full source extraction script is retained separately in the working repository; frozen experiment scripts are supplied for method provenance and require the original workspace dependencies for inference.
+
+This final study supersedes the exploratory pilot as the principal empirical result. The older pilot manuscript and its archives are preserved separately; its previously examined development results and timing appendix are not pooled into the final tables.
+\end{document}

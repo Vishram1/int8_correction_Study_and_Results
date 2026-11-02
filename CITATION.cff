@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+message: "Please cite the accompanying unpublished manuscript if you use this study or its evidence."
+title: "Classifier-Correction Reuse after INT8 Recalibration: Accuracy Retention and the Value of Shared Fitting"
+authors:
+  - given-names: "Vishwaram"
+    family-names: "Reddy"
+version: "manuscript-v2"
+preferred-citation:
+  type: unpublished
+  title: "Classifier-Correction Reuse after INT8 Recalibration: Accuracy Retention and the Value of Shared Fitting"
+  authors:
+    - given-names: "Vishwaram"
+      family-names: "Reddy"
+  year: 2026
+  notes: "Unpublished manuscript, revision 2, October 15, 2026."
